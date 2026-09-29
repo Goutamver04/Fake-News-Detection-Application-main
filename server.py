@@ -240,7 +240,16 @@ def verify_single_line_claim(input_text):
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+        if 'directory' not in kwargs:
+            kwargs['directory'] = DIRECTORY
+        super().__init__(*args, **kwargs)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.end_headers()
 
     def do_GET(self):
         parsed_url = urllib.parse.urlparse(self.path)
@@ -250,6 +259,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if path == '/api/metrics':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             active_metrics = metrics or {
                 "Logistic Regression": {"Accuracy": 1.0, "Precision": 1.0, "Recall": 1.0, "F1-Score": 1.0},
@@ -264,6 +274,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         elif path == '/api/news':
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             category = query_params.get('category', ['general'])[0]
             country = query_params.get('country', ['us'])[0]
@@ -291,6 +302,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             res = verify_single_line_claim(text)
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(res).encode('utf-8'))
             return
@@ -317,6 +329,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
 
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
+            self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             self.wfile.write(json.dumps(res).encode('utf-8'))
             return
@@ -324,10 +337,16 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         else:
             return super().do_POST()
 
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
-    print(f"==================================================")
-    print(f" [SERVER] NEWS LENS 3D SERVER RUNNING ON PORT {PORT}")
-    print(f" [URL] Open http://localhost:{PORT} in your browser")
-    print(f"==================================================")
-    httpd.serve_forever()
+# Top-level exports for Vercel Serverless Function entry point
+handler = CustomHandler
+app = CustomHandler
+application = CustomHandler
+
+if __name__ == '__main__':
+    socketserver.TCPServer.allow_reuse_address = True
+    with socketserver.TCPServer(("", PORT), CustomHandler) as httpd:
+        print(f"==================================================")
+        print(f" [SERVER] NEWS LENS 3D SERVER RUNNING ON PORT {PORT}")
+        print(f" [URL] Open http://localhost:{PORT} in your browser")
+        print(f"==================================================")
+        httpd.serve_forever()

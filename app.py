@@ -83,106 +83,115 @@ def ensure_datasets():
         pd.DataFrame(fake_articles).to_csv(FAKE_PATH, index=False)
         pd.DataFrame(true_articles).to_csv(TRUE_PATH, index=False)
 
-ensure_datasets()
+try:
+    from server import CustomHandler, handler, app, application
+except Exception:
+    pass
 
-# ====================================================
-# Load Dataset
-# ====================================================
+def run_training():
+    ensure_datasets()
 
-fake_df = pd.read_csv(FAKE_PATH)
-true_df = pd.read_csv(TRUE_PATH)
+    # ====================================================
+    # Load Dataset
+    # ====================================================
 
-fake_df["label"] = 0
-true_df["label"] = 1
+    fake_df = pd.read_csv(FAKE_PATH)
+    true_df = pd.read_csv(TRUE_PATH)
 
-# Merge and shuffle dataset
-df = pd.concat([fake_df, true_df], axis=0)
-df = shuffle(df).reset_index(drop=True)
+    fake_df["label"] = 0
+    true_df["label"] = 1
 
-# ====================================================
-# Data Cleaning & Preprocessing
-# ====================================================
+    # Merge and shuffle dataset
+    df = pd.concat([fake_df, true_df], axis=0)
+    df = shuffle(df).reset_index(drop=True)
 
-stop_words = set(stopwords.words("english"))
+    # ====================================================
+    # Data Cleaning & Preprocessing
+    # ====================================================
 
-def clean_text(text):
-    text = str(text).lower()
-    text = re.sub(r'\[.*?\]', '', text)
-    text = re.sub(r'https?://\S+|www\.\S+', '', text)
-    text = re.sub(r'<.*?>+', '', text)
-    text = re.sub(r'[%s]' % re.escape(string.punctuation), '', text)
-    text = re.sub(r'\n', '', text)
-    text = re.sub(r'\w*\d\w*', '', text)
-    words = text.split()
-    cleaned = [w for w in words if w not in stop_words]
-    return ' '.join(cleaned)
+    stop_words = set(stopwords.words("english"))
 
-df["text_clean"] = df["text"].apply(clean_text)
+    def clean_text(text):
+        text = str(text).lower()
+        text = re.sub(r'\[.*?\]', '', text)
+        text = re.sub(r'https?://\S+|www\.\S+', '', text)
+        text = re.sub(r'<.*?>+', '', text)
+        text = re.sub(r'[%s]' % re.escape(string.punctuation), '', text)
+        text = re.sub(r'\n', '', text)
+        text = re.sub(r'\w*\d\w*', '', text)
+        words = text.split()
+        cleaned = [w for w in words if w not in stop_words]
+        return ' '.join(cleaned)
 
-# ====================================================
-# Train Test Split & Vectorization
-# ====================================================
+    df["text_clean"] = df["text"].apply(clean_text)
 
-X = df["text_clean"]
-y = df["label"]
+    # ====================================================
+    # Train Test Split & Vectorization
+    # ====================================================
 
-X_train, X_test, y_train, y_test = train_test_split(
-    X, y, test_size=0.2, random_state=42
-)
+    X = df["text_clean"]
+    y = df["label"]
 
-vectorizer = TfidfVectorizer(max_features=5000)
-X_train_vec = vectorizer.fit_transform(X_train)
-X_test_vec = vectorizer.transform(X_test)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
 
-# ====================================================
-# Train Machine Learning Models
-# ====================================================
+    vectorizer = TfidfVectorizer(max_features=5000)
+    X_train_vec = vectorizer.fit_transform(X_train)
+    X_test_vec = vectorizer.transform(X_test)
 
-print("--- Training Logistic Regression ---")
-lr_model = LogisticRegression()
-lr_model.fit(X_train_vec, y_train)
-lr_preds = lr_model.predict(X_test_vec)
-print(f"Logistic Regression Accuracy: {accuracy_score(y_test, lr_preds):.4f}")
+    # ====================================================
+    # Train Machine Learning Models
+    # ====================================================
 
-print("--- Training K-Nearest Neighbors ---")
-knn_model = KNeighborsClassifier(n_neighbors=min(5, len(X_train)))
-knn_model.fit(X_train_vec, y_train)
-knn_preds = knn_model.predict(X_test_vec)
-print(f"KNN Accuracy: {accuracy_score(y_test, knn_preds):.4f}")
+    print("--- Training Logistic Regression ---")
+    lr_model = LogisticRegression()
+    lr_model.fit(X_train_vec, y_train)
+    lr_preds = lr_model.predict(X_test_vec)
+    print(f"Logistic Regression Accuracy: {accuracy_score(y_test, lr_preds):.4f}")
 
-print("--- Training Random Forest ---")
-rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
-rf_model.fit(X_train_vec, y_train)
-rf_preds = rf_model.predict(X_test_vec)
-print(f"Random Forest Accuracy: {accuracy_score(y_test, rf_preds):.4f}")
+    print("--- Training K-Nearest Neighbors ---")
+    knn_model = KNeighborsClassifier(n_neighbors=min(5, len(X_train)))
+    knn_model.fit(X_train_vec, y_train)
+    knn_preds = knn_model.predict(X_test_vec)
+    print(f"KNN Accuracy: {accuracy_score(y_test, knn_preds):.4f}")
 
-# ====================================================
-# Train Deep Learning Keras Neural Network
-# ====================================================
+    print("--- Training Random Forest ---")
+    rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_model.fit(X_train_vec, y_train)
+    rf_preds = rf_model.predict(X_test_vec)
+    print(f"Random Forest Accuracy: {accuracy_score(y_test, rf_preds):.4f}")
 
-print("--- Training Keras Neural Network ---")
-if HAS_TF:
-    nn_model = keras.Sequential([
-        layers.Dense(128, activation='relu', input_shape=(X_train_vec.shape[1],)),
-        layers.Dropout(0.3),
-        layers.Dense(64, activation='relu'),
-        layers.Dense(1, activation='sigmoid')
-    ])
+    # ====================================================
+    # Train Deep Learning Keras Neural Network
+    # ====================================================
 
-    nn_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-    nn_model.fit(X_train_vec.toarray(), y_train, epochs=3, batch_size=32, verbose=1)
+    print("--- Training Keras Neural Network ---")
+    if HAS_TF:
+        nn_model = keras.Sequential([
+            layers.Dense(128, activation='relu', input_shape=(X_train_vec.shape[1],)),
+            layers.Dropout(0.3),
+            layers.Dense(64, activation='relu'),
+            layers.Dense(1, activation='sigmoid')
+        ])
 
-    nn_preds_prob = nn_model.predict(X_test_vec.toarray())
-    nn_preds = (nn_preds_prob > 0.5).astype(int)
-    print(f"Neural Network Accuracy: {accuracy_score(y_test, nn_preds):.4f}")
-else:
-    print("TensorFlow not installed in environment — skipped Keras NN training step.")
+        nn_model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+        nn_model.fit(X_train_vec.toarray(), y_train, epochs=3, batch_size=32, verbose=1)
 
-# ====================================================
-# Model Evaluation Summary
-# ====================================================
+        nn_preds_prob = nn_model.predict(X_test_vec.toarray())
+        nn_preds = (nn_preds_prob > 0.5).astype(int)
+        print(f"Neural Network Accuracy: {accuracy_score(y_test, nn_preds):.4f}")
+    else:
+        print("TensorFlow not installed in environment — skipped Keras NN training step.")
 
-print("\n" + "=" * 50)
-print("FINAL CLASSIFICATION REPORT (Random Forest):")
-print("=" * 50)
-print(classification_report(y_test, rf_preds))
+    # ====================================================
+    # Model Evaluation Summary
+    # ====================================================
+
+    print("\n" + "=" * 50)
+    print("FINAL CLASSIFICATION REPORT (Random Forest):")
+    print("=" * 50)
+    print(classification_report(y_test, rf_preds))
+
+if __name__ == '__main__':
+    run_training()
