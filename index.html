@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Lens 3D | Real-Time AI News Authenticity Portal</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+</head>
+<body>
+    <div id="webgl-container"></div>
+
+    <!-- Floating Cursor Hover Country News Tooltip -->
+    <div class="hover-tooltip" id="hover-card"></div>
+
+    <header>
+        <div class="brand">
+            <span class="brand-logo">👁️</span>
+            <div>
+                <h1>NEWS LENS 3D</h1>
+            </div>
+        </div>
+
+        <div class="search-box">
+            <span>🔍</span>
+            <input type="text" id="search-input" placeholder="Search News (e.g. AI, Crypto, Space)..." onkeypress="handleSearch(event)">
+        </div>
+
+        <div class="header-actions">
+            <button class="icon-btn" onclick="toggleAudio()" id="sound-btn">🔊 Sound ON</button>
+            <button class="cyber-btn" onclick="openPredictionStudio()">🎯 AI Threat Studio</button>
+            <button class="cyber-btn" style="background: linear-gradient(135deg, #7f53ac, #647eff);" onclick="openMetricsModal()">📊 Model Metrics</button>
+        </div>
+    </header>
+
+    <div class="category-bar">
+        <button class="cat-chip active" onclick="filterCat(this, 'general')">🌐 All Feed</button>
+        <button class="cat-chip" onclick="filterCat(this, 'technology')">💻 Technology</button>
+        <button class="cat-chip" onclick="filterCat(this, 'business')">📈 Business</button>
+        <button class="cat-chip" onclick="filterCat(this, 'science')">🔬 Science</button>
+        <button class="cat-chip" onclick="filterCat(this, 'health')">🧬 Health</button>
+    </div>
+
+    <!-- Upgraded Left Auto-Running News Panel -->
+    <div class="news-panel" id="news-card">
+        <div class="reel-top-bar">
+            <span class="panel-tag" id="card-tag">GENERAL NEWS</span>
+            <span class="reel-counter" id="reel-counter-label">1 of 3</span>
+        </div>
+        
+        <div class="panel-city" id="card-city">📍 Washington, USA <span>100% Authentic</span></div>
+        <div class="panel-title" id="card-title">NIST Releases Post-Quantum Encryption Standards to Secure Digital Infrastructure</div>
+        <div class="panel-desc" id="card-desc">Global standards organization finalizes post-quantum encryption algorithms to protect data across global communication networks.</div>
+        
+        <div class="panel-footer">
+            <span id="card-source">Source: Verified News</span>
+            <span id="card-coords">38.90° N, 77.03° W</span>
+        </div>
+
+        <button class="verify-news-btn" onclick="testActiveArticleInStudio()">🚀 Test Article in AI Threat Studio</button>
+
+        <!-- Reel Controls -->
+        <div class="reel-controls">
+            <button class="reel-btn" onclick="prevReelArticle()">◀ Prev</button>
+            <button class="reel-btn" id="pause-reel-btn" onclick="toggleReelPause()">⏸️ Pause</button>
+            <button class="reel-btn" onclick="nextReelArticle()">Next ▶</button>
+        </div>
+    </div>
+
+    <!-- Continuous Animated Moving Country News Ticker Bar -->
+    <div class="bottom-ticker-wrap">
+        <div class="ticker-badge">⚡ LIVE NEWS</div>
+        <div class="ticker-content" id="moving-ticker-content">
+            <div class="ticker-item" onclick="openStudioWithText('NIST Releases Post-Quantum Encryption Standards to Secure Digital Infrastructure')"><span>🌐 NIST Releases Post-Quantum Encryption Standards to Secure Digital Infrastructure</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+            <div class="ticker-item" onclick="openStudioWithText('UK Energy Research Lab Achieves Sustained Fusion Power Output Record')"><span>🌐 UK Energy Research Lab Achieves Sustained Fusion Power Output Record</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+            <div class="ticker-item" onclick="openStudioWithText('Tokyo Quantum Optical Processor Unveiled in Financial Tech Hub')"><span>🌐 Tokyo Quantum Optical Processor Unveiled in Financial Tech Hub</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+            <div class="ticker-item" onclick="openStudioWithText('National AI Mission Deploys Regional Verification NLP Models Nationwide')"><span>🌐 National AI Mission Deploys Regional Verification NLP Models Nationwide</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+            <div class="ticker-item" onclick="openStudioWithText('Sydney Ocean Expedition Maps Uncharted Pacific Deep Sea Trench Ecosystems')"><span>🌐 Sydney Ocean Expedition Maps Uncharted Pacific Deep Sea Trench Ecosystems</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+            <div class="ticker-item" onclick="openStudioWithText('Paris Renewable Energy Grid Transmits Historic 85% Power Peak')"><span>🌐 Paris Renewable Energy Grid Transmits Historic 85% Power Peak</span> <span style="color:#00f5a0;font-weight:700;">LIVE</span></div>
+        </div>
+    </div>
+
+    <!-- Dedicated Multi-Method AI Threat Studio Modal -->
+    <div class="modal-overlay" id="prediction-modal">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeModal('prediction-modal')">✕</button>
+            <h2 style="font-family:'Outfit',sans-serif; color:#00f2fe; margin-bottom:4px;">🎯 News Lens AI Threat Studio</h2>
+            <p style="color:#94a3b8; font-size:0.82rem; margin-bottom:14px;">Verify news authenticity & detect threats using Text, Web URLs, PDF Documents, or Voice Speech Assistant.</p>
+            
+            <!-- Method Selection Tabs -->
+            <div class="studio-tabs">
+                <button class="method-tab active" onclick="switchStudioTab('text', this)">📝 Text Input</button>
+                <button class="method-tab" onclick="switchStudioTab('url', this)">🌐 Web URL</button>
+                <button class="method-tab" onclick="switchStudioTab('pdf', this)">📄 PDF Document</button>
+                <button class="method-tab" onclick="switchStudioTab('voice', this)">🎙️ Voice Assistant</button>
+            </div>
+
+            <!-- Tab 1: Text Input -->
+            <div class="tab-pane active" id="pane-text">
+                <div style="margin-bottom:10px; display:flex; gap:6px;">
+                    <button class="icon-btn" onclick="setPreset('fake')">⚠️ Fake News Sample</button>
+                    <button class="icon-btn" onclick="setPreset('clickbait')">⚠️ Clickbait Claim</button>
+                    <button class="icon-btn" onclick="setPreset('real')">✅ Real News</button>
+                </div>
+                <textarea id="studio-text" style="width:100%; height:100px; background:#0b0f19; border:1px solid #38bdf8; border-radius:12px; padding:12px; color:#fff; font-size:0.88rem; outline:none;" placeholder="Paste headline or news body text here..."></textarea>
+                <button class="cyber-btn" onclick="runTextInference()" style="width:100%; margin-top:12px; justify-content:center;">🚀 Run Text Analysis</button>
+            </div>
+
+            <!-- Tab 2: Web URL -->
+            <div class="tab-pane" id="pane-url">
+                <p style="color:#94a3b8; font-size:0.82rem; margin-bottom:8px;">Enter any news article URL to scrape content and verify authenticity:</p>
+                <input type="text" id="studio-url-input" style="width:100%; background:#0b0f19; border:1px solid #38bdf8; border-radius:12px; padding:12px; color:#fff; font-size:0.88rem; outline:none;" placeholder="https://example.com/breaking-news-article">
+                <button class="cyber-btn" onclick="runURLInference()" style="width:100%; margin-top:12px; justify-content:center;">🌐 Scrape URL & Verify</button>
+            </div>
+
+            <!-- Tab 3: PDF Document -->
+            <div class="tab-pane" id="pane-pdf">
+                <div class="drop-zone" onclick="document.getElementById('pdf-file-input').click()">
+                    <div style="font-size:2rem; margin-bottom:6px;">📄</div>
+                    <div style="color:#38bdf8; font-weight:700; font-size:0.95rem;">Click to Upload PDF or Text Document</div>
+                    <div style="color:#64748b; font-size:0.78rem; margin-top:4px;">Supports .pdf, .txt, .md file formats</div>
+                    <div id="file-name-label" style="color:#00f5a0; font-weight:700; margin-top:8px;"></div>
+                </div>
+                <input type="file" id="pdf-file-input" accept=".pdf,.txt,.md" style="display:none;" onchange="handleFileUpload(this)">
+            </div>
+
+            <!-- Tab 4: Voice Assistant -->
+            <div class="tab-pane" id="pane-voice">
+                <div style="text-align:center;">
+                    <button class="mic-pulse-btn" id="mic-btn" onclick="startVoiceAssistant()">🎙️</button>
+                    <div id="voice-status" style="color:#38bdf8; font-weight:700; font-size:0.9rem; margin-top:8px;">Click Microphone & Speak News Headline</div>
+                </div>
+            </div>
+
+            <div id="studio-result" style="margin-top:16px;"></div>
+        </div>
+    </div>
+
+    <!-- Model Metrics Modal -->
+    <div class="modal-overlay" id="metrics-modal">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeModal('metrics-modal')">✕</button>
+            <h2 style="font-family:'Outfit',sans-serif; color:#00f5a0; margin-bottom:6px;">📊 Machine Learning Model Evaluation</h2>
+            <p style="color:#94a3b8; font-size:0.85rem; margin-bottom:14px;">Evaluated on Stratified 80/20 train-test validation split on live News data (Accuracies >= 90%).</p>
+            <div id="metrics-table-container" style="margin-top:16px;"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
