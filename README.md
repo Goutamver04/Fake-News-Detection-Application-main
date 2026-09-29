@@ -1,10 +1,13 @@
 # 👁️ NEWS LENS 3D - AI-Powered News Authenticity & Truth Engine
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?style=for-the-badge&logo=vercel)](https://fake-news-detection-application-mai-ten.vercel.app/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-3D%20Earth-green.svg)](https://threejs.org/)
-[![ML Accuracy](https://img.shields.io/badge/ML%20Accuracy-95%25%2B-brightgreen.svg)](file:///c:/Users/Lenovo/Documents/Fake%20News/server.py)
+[![ML Accuracy](https://img.shields.io/badge/ML%20Accuracy-95%25%2B-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)]()
 
+> 🌐 **Live Demo**: [fake-news-detection-application-mai-ten.vercel.app](https://fake-news-detection-application-mai-ten.vercel.app/)
+>
 > **NEWS LENS 3D** is an advanced 3D web application and machine learning platform designed to detect fake news, verify claim authenticity, and monitor real-time breaking news across the globe. Powered by a **Photorealistic 3D Earth Globe**, **Multi-Modal AI Threat Studio**, and a **5-Model ML Ensemble Stance Engine (94.67% – 100% Accuracy)**.
 
 ---
@@ -30,7 +33,9 @@
 ## 📁 Project Structure
 
 ```
-Fake News/
+Fake-News-Detection/
+├── api/
+│   └── index.py          # Vercel Serverless Function entry point
 ├── server.py             # Main production HTTP API server & verification engine (Port 5000)
 ├── index.html            # Master single-page 3D Web UI layout
 ├── style.css             # Glassmorphism dark mode CSS design system & responsive layout
@@ -39,6 +44,7 @@ Fake News/
 ├── train.py              # ML training pipeline for vectorizer and ensemble model dictionary
 ├── news_service.py       # Dataset generation and scraper utilities
 ├── run.py                # Console launcher banner
+├── vercel.json           # Vercel deployment and routing configuration
 ├── README.md             # Project documentation
 ├── vectorizer.pkl        # TF-IDF Feature Vectorizer artifact
 ├── models.pkl            # Trained 5-Model Machine Learning Ensemble artifact
