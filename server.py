@@ -1,5 +1,10 @@
 import os
 import json
+import time
+import socket
+import ipaddress
+import threading
+from collections import defaultdict
 import http.server
 import socketserver
 import urllib.parse
@@ -102,6 +107,100 @@ def load_env():
 
 load_env()
 NEWS_API_KEY = os.environ.get('NEWS_API_KEY', '')
+API_SECRET_KEY = os.environ.get('API_SECRET_KEY', '')
+MAX_PAYLOAD_SIZE = int(os.environ.get('MAX_PAYLOAD_SIZE', 256 * 1024))
+RATE_LIMIT_PER_MINUTE = int(os.environ.get('RATE_LIMIT_PER_MINUTE', 60))
+
+# ----------------------------------------------------
+# Security & Rate Limiting Infrastructure
+# ----------------------------------------------------
+rate_lock = threading.Lock()
+request_history = defaultdict(list)
+RATE_LIMIT_WINDOW = 60  # seconds
+
+def is_rate_limited(client_ip):
+    """Sliding-window IP rate limiter to protect endpoints against DoS & brute-force."""
+    now = time.time()
+    with rate_lock:
+        history = request_history[client_ip]
+        valid = [t for t in history if now - t < RATE_LIMIT_WINDOW]
+        request_history[client_ip] = valid
+
+        # Prune stale IPs if memory accumulates
+        if len(request_history) > 3000:
+            for ip in list(request_history.keys()):
+                if not request_history[ip] or (now - request_history[ip][-1] > RATE_LIMIT_WINDOW * 2):
+                    del request_history[ip]
+
+        if len(valid) >= RATE_LIMIT_PER_MINUTE:
+            return True
+
+        request_history[client_ip].append(now)
+        return False
+
+def verify_api_auth(headers):
+    """
+    Validates optional API Secret Key for protected backend endpoints.
+    Allows open access if API_SECRET_KEY is not configured (default for local development).
+    """
+    if not API_SECRET_KEY:
+        return True, ""
+
+    auth_header = headers.get('Authorization', '').strip()
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:].strip()
+        if token == API_SECRET_KEY:
+            return True, ""
+
+    api_key_header = headers.get('X-API-Key', '').strip()
+    if api_key_header == API_SECRET_KEY:
+        return True, ""
+
+    return False, "Missing or invalid API authorization token."
+
+def is_safe_url(target_url):
+    """
+    Full Server-Side Request Forgery (SSRF) Protection.
+    Validates URL scheme and resolves all DNS IP addresses to ensure
+    private, loopback, reserved, multicast, or link-local IPs cannot be probed.
+    """
+    if not target_url or not isinstance(target_url, str):
+        return False, "Target URL must be a non-empty string."
+
+    try:
+        parsed = urllib.parse.urlparse(target_url)
+    except Exception:
+        return False, "Malformed URL format."
+
+    if parsed.scheme.lower() not in ('http', 'https'):
+        return False, "Only HTTP and HTTPS protocols are allowed."
+
+    hostname = (parsed.hostname or '').strip().lower()
+    if not hostname:
+        return False, "Invalid URL hostname."
+
+    # Block localhost & loopback names
+    if hostname in ('localhost', '0.0.0.0', '127.0.0.1', '::1', 'ip6-localhost', 'ip6-loopback'):
+        return False, "Loopback addresses are restricted."
+
+    # Block internal TLDs
+    if hostname.endswith(('.local', '.internal', '.lan', '.corp', '.home', '.arpa')):
+        return False, "Internal network domain names are restricted."
+
+    # Resolve hostname to all IP addresses and verify safety
+    try:
+        addr_info = socket.getaddrinfo(hostname, None)
+        for _, _, _, _, sockaddr in addr_info:
+            ip_str = sockaddr[0]
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local or ip.is_multicast:
+                return False, "Access to private, link-local, or loopback network addresses is restricted."
+    except socket.gaierror:
+        return False, "Unable to resolve target host."
+    except Exception:
+        return False, "Host validation failed."
+
+    return True, ""
 
 # Known Outrageous Fake Tropes, Meta-Test Words & Impossible Fakes
 EXPLICIT_FAKE_KEYWORDS = [
@@ -277,6 +376,9 @@ def verify_single_line_claim(input_text):
     }
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
+    server_version = "NewsLensSecure"
+    sys_version = ""
+
     def __init__(self, *args, **kwargs):
         if 'directory' not in kwargs:
             kwargs['directory'] = DIRECTORY
@@ -287,23 +389,55 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         self.send_error(404, "File not found")
         return None
 
+    def end_headers(self):
+        # Automatically inject standard security headers on every response
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('X-Frame-Options', 'SAMEORIGIN')
+        self.send_header('X-XSS-Protection', '1; mode=block')
+        self.send_header('Referrer-Policy', 'strict-origin-when-cross-origin')
+        super().end_headers()
+
+    def send_json(self, status_code, data):
+        body = json.dumps(data).encode('utf-8')
+        self.send_response(status_code)
+        self.send_header('Content-Type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Content-Length', str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_json_error(self, status_code, error, message):
+        self.send_json(status_code, {
+            'error': error,
+            'message': message,
+            'status': status_code
+        })
+
     def do_OPTIONS(self):
         self.send_response(200)
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
-        self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+        self.send_header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key')
         self.end_headers()
 
     def do_GET(self):
         parsed_url = urllib.parse.urlparse(self.path)
         path = parsed_url.path
         query_params = urllib.parse.parse_qs(parsed_url.query)
+        client_ip = self.client_address[0] if self.client_address else "127.0.0.1"
+
+        # Apply security controls to all API endpoints
+        if path.startswith('/api/'):
+            if is_rate_limited(client_ip):
+                self.send_json_error(429, 'Too Many Requests', 'Rate limit exceeded. Please wait 60 seconds.')
+                return
+
+            is_authed, auth_msg = verify_api_auth(self.headers)
+            if not is_authed:
+                self.send_json_error(401, 'Unauthorized', auth_msg)
+                return
 
         if path == '/api/metrics':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
             active_metrics = metrics or {
                 "Logistic Regression": {"Accuracy": 1.0, "Precision": 1.0, "Recall": 1.0, "F1-Score": 1.0},
                 "Random Forest": {"Accuracy": 1.0, "Precision": 1.0, "Recall": 1.0, "F1-Score": 1.0},
@@ -311,16 +445,17 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 "Neural Network": {"Accuracy": 1.0, "Precision": 1.0, "Recall": 1.0, "F1-Score": 1.0},
                 "Ensemble Classifier": {"Accuracy": 1.0, "Precision": 1.0, "Recall": 1.0, "F1-Score": 1.0}
             }
-            self.wfile.write(json.dumps(active_metrics).encode('utf-8'))
+            self.send_json(200, active_metrics)
             return
 
         elif path == '/api/news':
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
             category = query_params.get('category', ['general'])[0]
             country = query_params.get('country', ['us'])[0]
+
+            # Sanitize parameters against injection
+            category = re.sub(r'[^a-zA-Z]', '', category)[:20] or 'general'
+            country = re.sub(r'[^a-zA-Z]', '', country)[:5] or 'us'
+
             clean_articles = []
             if NEWS_API_KEY:
                 try:
@@ -340,7 +475,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                             })
                 except Exception:
                     clean_articles = []
-            self.wfile.write(json.dumps(clean_articles).encode('utf-8'))
+            self.send_json(200, clean_articles)
             return
 
         else:
@@ -360,48 +495,59 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                 return
 
     def do_POST(self):
-        if self.path == '/api/predict':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
-            text = data.get('text', '')
+        client_ip = self.client_address[0] if self.client_address else "127.0.0.1"
 
+        # Rate limiting check
+        if is_rate_limited(client_ip):
+            self.send_json_error(429, 'Too Many Requests', 'Rate limit exceeded. Please wait 60 seconds.')
+            return
+
+        # Check optional API Secret Key
+        is_authed, auth_msg = verify_api_auth(self.headers)
+        if not is_authed:
+            self.send_json_error(401, 'Unauthorized', auth_msg)
+            return
+
+        # Payload Size Validation (DoS prevention)
+        try:
+            content_length = int(self.headers.get('Content-Length', 0))
+        except (ValueError, TypeError):
+            content_length = 0
+
+        if content_length > MAX_PAYLOAD_SIZE:
+            self.send_json_error(413, 'Payload Too Large', f'Request payload exceeds maximum allowed size of {MAX_PAYLOAD_SIZE // 1024} KB.')
+            return
+
+        post_data = self.rfile.read(content_length) if content_length > 0 else b'{}'
+        try:
+            data = json.loads(post_data.decode('utf-8'))
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            self.send_json_error(400, 'Bad Request', 'Invalid JSON payload.')
+            return
+
+        if self.path == '/api/predict':
+            text = str(data.get('text', ''))[:10000] # Cap input text length
             res = verify_single_line_claim(text)
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(res).encode('utf-8'))
+            self.send_json(200, res)
             return
 
         elif self.path == '/api/url-predict':
-            content_length = int(self.headers['Content-Length'])
-            post_data = self.rfile.read(content_length)
-            data = json.loads(post_data.decode('utf-8'))
-            target_url = data.get('url', '')
+            target_url = str(data.get('url', '')).strip()
 
-            # SSRF validation: only permit public http/https URLs, block loopback/private addresses
-            parsed_target = urllib.parse.urlparse(target_url)
-            hostname = (parsed_target.hostname or '').lower()
-            if (parsed_target.scheme not in ('http', 'https') or
-                not hostname or
-                hostname in ('localhost', '127.0.0.1', '0.0.0.0', '::1') or
-                hostname.startswith('192.168.') or hostname.startswith('10.')):
+            # Full SSRF validation (blocking loopback, private subnets, link-local metadata)
+            safe, err_msg = is_safe_url(target_url)
+            if not safe:
                 res = verify_single_line_claim("External Web Article")
                 res['target_url'] = target_url
-                res['extracted_text'] = "Invalid or restricted URL source."
-                self.send_response(200)
-                self.send_header('Content-Type', 'application/json')
-                self.send_header('Access-Control-Allow-Origin', '*')
-                self.end_headers()
-                self.wfile.write(json.dumps(res).encode('utf-8'))
+                res['extracted_text'] = f"Restricted URL: {err_msg}"
+                self.send_json(200, res)
                 return
 
             scraped_text = ""
             try:
-                req = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0'})
+                req = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'})
                 with urllib.request.urlopen(req, timeout=5) as response:
-                    html_content = response.read().decode('utf-8', errors='ignore')
+                    html_content = response.read(MAX_PAYLOAD_SIZE).decode('utf-8', errors='ignore')
                     scraped_text = re.sub(r'<script.*?>.*?</script>|<style.*?>.*?</style>|<.*?>', ' ', html_content)
                     scraped_text = ' '.join(scraped_text.split())[:1500]
             except Exception:
@@ -410,16 +556,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             res = verify_single_line_claim(scraped_text)
             res['target_url'] = target_url
             res['extracted_text'] = scraped_text[:300]
-
-            self.send_response(200)
-            self.send_header('Content-Type', 'application/json')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            self.wfile.write(json.dumps(res).encode('utf-8'))
+            self.send_json(200, res)
             return
 
         else:
-            self.send_error(404, "Endpoint not found")
+            self.send_json_error(404, "Endpoint not found", f"The endpoint '{self.path}' was not found.")
             return
 
 # Top-level exports for Vercel Serverless Function entry point
