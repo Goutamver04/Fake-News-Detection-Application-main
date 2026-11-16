@@ -8,7 +8,8 @@ if ROOT_DIR not in sys.path:
 
 from server import CustomHandler
 
-# Standard Vercel Serverless Function exports
-handler = CustomHandler
-app = CustomHandler
-application = CustomHandler
+class handler(CustomHandler):
+    pass
+
+app = handler
+application = handler

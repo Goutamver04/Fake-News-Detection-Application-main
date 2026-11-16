@@ -525,13 +525,16 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.send_json_error(400, 'Bad Request', 'Invalid JSON payload.')
             return
 
-        if self.path == '/api/predict':
+        parsed_url = urllib.parse.urlparse(self.path)
+        path = parsed_url.path.rstrip('/')
+
+        if path == '/api/predict':
             text = str(data.get('text', ''))[:10000] # Cap input text length
             res = verify_single_line_claim(text)
             self.send_json(200, res)
             return
 
-        elif self.path == '/api/url-predict':
+        elif path == '/api/url-predict':
             target_url = str(data.get('url', '')).strip()
 
             # Full SSRF validation (blocking loopback, private subnets, link-local metadata)
