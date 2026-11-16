@@ -62,7 +62,7 @@ tfidf, models, metrics = load_artifacts()
 
 # App Header
 st.markdown("<div class='main-header'>👁️ NEWS LENS 3D</div>", unsafe_allow_html=True)
-st.markdown("<div class='sub-header'>Real-Time NLP & Machine Learning Engine | News API Integrated</div>", unsafe_allow_html=True)
+st.markdown("<div class='sub-header'>Real-Time NLP & Machine Learning Engine | Live Truth Verification Engine</div>", unsafe_allow_html=True)
 
 # Sidebar Navigation
 st.sidebar.title("Navigation")

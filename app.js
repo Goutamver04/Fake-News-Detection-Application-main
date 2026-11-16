@@ -459,7 +459,7 @@ function runURLInference() {
     if(!url) return;
     
     playTone(900, "triangle", 0.2);
-    document.getElementById('studio-result').innerHTML = "<div style='color:#00f2fe; text-align:center;'>🌐 Fetching URL Article & Gemini Fact-Check...</div>";
+    document.getElementById('studio-result').innerHTML = "<div style='color:#00f2fe; text-align:center;'>🌐 Fetching URL Article & Verifying Authenticity...</div>";
     
     fetch('/api/url-predict', {
         method: 'POST',

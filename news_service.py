@@ -3,14 +3,29 @@ import pandas as pd
 import os
 import random
 
-NEWS_API_KEY = "a342961efa4e4c80898b2c80ac4b0586"
+def load_env():
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except Exception:
+            pass
+
+load_env()
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
 NEWS_API_URL = "https://newsapi.org/v2/top-headlines"
 
-def fetch_live_news(api_key=NEWS_API_KEY):
+def fetch_live_news(api_key=None):
     """
     Fetches real-time news headlines from News API across major categories
     """
-    print(f"[News API] Fetching live headlines using API key {api_key[:8]}...")
+    api_key = api_key or NEWS_API_KEY
+    print("[News API] Fetching live headlines...")
     categories = ['technology', 'business', 'science', 'health', 'general']
     articles_list = []
     

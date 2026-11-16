@@ -87,7 +87,21 @@ if os.path.exists(tfidf_path) and os.path.exists(models_path):
     except Exception as e:
         print(f"[News Lens API Error] Failed to load model artifacts: {e}")
 
-NEWS_API_KEY = "a342961efa4e4c80898b2c80ac4b0586"
+def load_env():
+    env_file = os.path.join(DIRECTORY, '.env')
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except Exception:
+            pass
+
+load_env()
+NEWS_API_KEY = os.environ.get('NEWS_API_KEY', '')
 
 # Known Outrageous Fake Tropes, Meta-Test Words & Impossible Fakes
 EXPLICIT_FAKE_KEYWORDS = [
@@ -259,8 +273,7 @@ def verify_single_line_claim(input_text):
         'urls_count': len(urls),
         'urgency_count': len(found_urgency),
         'urgency_words': found_urgency,
-        'tokens_count': len(input_clean.split()),
-        'raw_sample': input_text[:120]
+        'tokens_count': len(input_clean.split())
     }
 
 class CustomHandler(http.server.SimpleHTTPRequestHandler):
@@ -268,6 +281,11 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
         if 'directory' not in kwargs:
             kwargs['directory'] = DIRECTORY
         super().__init__(*args, **kwargs)
+
+    def list_directory(self, path):
+        # Strictly prevent directory listings
+        self.send_error(404, "File not found")
+        return None
 
     def do_OPTIONS(self):
         self.send_response(200)
@@ -303,19 +321,43 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             self.end_headers()
             category = query_params.get('category', ['general'])[0]
             country = query_params.get('country', ['us'])[0]
-            try:
-                url = f"https://newsapi.org/v2/top-headlines?apiKey={NEWS_API_KEY}&category={category}&country={country}&pageSize=15"
-                req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req) as response:
-                    data = json.loads(response.read().decode('utf-8'))
-                    articles = data.get('articles', [])
-                    self.wfile.write(json.dumps(articles).encode('utf-8'))
-            except Exception as e:
-                self.wfile.write(json.dumps([]).encode('utf-8'))
+            clean_articles = []
+            if NEWS_API_KEY:
+                try:
+                    url = f"https://newsapi.org/v2/top-headlines?apiKey={NEWS_API_KEY}&category={category}&country={country}&pageSize=15"
+                    req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=5) as response:
+                        data = json.loads(response.read().decode('utf-8'))
+                        for a in data.get('articles', []):
+                            source_name = 'Live News'
+                            if isinstance(a.get('source'), dict):
+                                source_name = a.get('source', {}).get('name') or 'Live News'
+                            clean_articles.append({
+                                'title': a.get('title', ''),
+                                'description': a.get('description', ''),
+                                'source': {'name': source_name},
+                                'url': a.get('url', '')
+                            })
+                except Exception:
+                    clean_articles = []
+            self.wfile.write(json.dumps(clean_articles).encode('utf-8'))
             return
 
         else:
-            return super().do_GET()
+            # Strictly allow only public frontend static assets
+            # Completely hide and block all backend code, credentials, model artifacts, datasets, and hidden files
+            clean_path = path.split('?')[0].lstrip('/')
+            allowed_static = {'', 'index.html', 'style.css', 'app.js', 'favicon.ico'}
+
+            if '..' in clean_path or clean_path.startswith('.'):
+                self.send_error(404, "File not found")
+                return
+
+            if clean_path in allowed_static:
+                return super().do_GET()
+            else:
+                self.send_error(404, "File not found")
+                return
 
     def do_POST(self):
         if self.path == '/api/predict':
@@ -338,6 +380,23 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             data = json.loads(post_data.decode('utf-8'))
             target_url = data.get('url', '')
 
+            # SSRF validation: only permit public http/https URLs, block loopback/private addresses
+            parsed_target = urllib.parse.urlparse(target_url)
+            hostname = (parsed_target.hostname or '').lower()
+            if (parsed_target.scheme not in ('http', 'https') or
+                not hostname or
+                hostname in ('localhost', '127.0.0.1', '0.0.0.0', '::1') or
+                hostname.startswith('192.168.') or hostname.startswith('10.')):
+                res = verify_single_line_claim("External Web Article")
+                res['target_url'] = target_url
+                res['extracted_text'] = "Invalid or restricted URL source."
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Access-Control-Allow-Origin', '*')
+                self.end_headers()
+                self.wfile.write(json.dumps(res).encode('utf-8'))
+                return
+
             scraped_text = ""
             try:
                 req = urllib.request.Request(target_url, headers={'User-Agent': 'Mozilla/5.0'})
@@ -345,7 +404,7 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
                     html_content = response.read().decode('utf-8', errors='ignore')
                     scraped_text = re.sub(r'<script.*?>.*?</script>|<style.*?>.*?</style>|<.*?>', ' ', html_content)
                     scraped_text = ' '.join(scraped_text.split())[:1500]
-            except Exception as e:
+            except Exception:
                 scraped_text = f"URL Content Analysis for {target_url}"
 
             res = verify_single_line_claim(scraped_text)
@@ -360,7 +419,8 @@ class CustomHandler(http.server.SimpleHTTPRequestHandler):
             return
 
         else:
-            return super().do_POST()
+            self.send_error(404, "Endpoint not found")
+            return
 
 # Top-level exports for Vercel Serverless Function entry point
 handler = CustomHandler

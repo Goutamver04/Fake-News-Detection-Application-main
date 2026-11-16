@@ -51,11 +51,25 @@ nltk.download("stopwords", quiet=True)
 FAKE_PATH = "Fake.csv"
 TRUE_PATH = "True.csv"
 
-NEWS_API_KEY = "a342961efa4e4c80898b2c80ac4b0586"
+def load_env():
+    env_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
+    if os.path.exists(env_file):
+        try:
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        k, v = line.split('=', 1)
+                        os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+        except Exception:
+            pass
+
+load_env()
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY", "")
 
 def ensure_datasets():
     if not os.path.exists(FAKE_PATH) or not os.path.exists(TRUE_PATH):
-        print("[News API] Generating Fake.csv and True.csv from News API key a342961efa4e...")
+        print("[News API] Generating Fake.csv and True.csv from live News API...")
         true_articles = []
         try:
             url = f"https://newsapi.org/v2/top-headlines?apiKey={NEWS_API_KEY}&language=en&pageSize=50"
@@ -169,7 +183,8 @@ def run_training():
     print("--- Training Keras Neural Network ---")
     if HAS_TF:
         nn_model = keras.Sequential([
-            layers.Dense(128, activation='relu', input_shape=(X_train_vec.shape[1],)),
+            layers.Input(shape=(X_train_vec.shape[1],)),
+            layers.Dense(128, activation='relu'),
             layers.Dropout(0.3),
             layers.Dense(64, activation='relu'),
             layers.Dense(1, activation='sigmoid')
