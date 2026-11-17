@@ -6,7 +6,8 @@
 [![ML Accuracy](https://img.shields.io/badge/ML%20Accuracy-95%25%2B-brightgreen.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-orange.svg)]()
 
-> 🌐 **Live Demo**: [fake-news-detection-application-mai-ten.vercel.app](https://fake-news-detection-application-mai-ten.vercel.app/)
+> 🌐 **Live Demo**: 
+https://fake-news-detection-application-mai.vercel.app/
 >
 > **NEWS LENS 3D** is an advanced 3D web application and machine learning platform designed to detect fake news, verify claim authenticity, and monitor real-time breaking news across the globe. Powered by a **Photorealistic 3D Earth Globe**, **Multi-Modal AI Threat Studio**, and a **5-Model ML Ensemble Stance Engine (94.67% – 100% Accuracy)**.
 
