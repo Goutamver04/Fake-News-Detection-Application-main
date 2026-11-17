@@ -1,6 +1,6 @@
 # 👁️ NEWS LENS 3D - AI-Powered News Authenticity & Truth Engine
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-black?style=for-the-badge&logo=vercel)](https://fake-news-detection-application-mai-ten.vercel.app/)
+[![Live Demo](https://fake-news-detection-application-mai-ten.vercel.app/)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Three.js](https://img.shields.io/badge/Three.js-3D%20Earth-green.svg)](https://threejs.org/)
 [![ML Accuracy](https://img.shields.io/badge/ML%20Accuracy-95%25%2B-brightgreen.svg)]()
